@@ -27,6 +27,23 @@ export const setOtpCommand = new SlashCommandBuilder()
       .setMaxLength(6)
   );
 
+// Login command
+export const loginCommand = new SlashCommandBuilder()
+  .setName('mbs-login')
+  .setDescription('🔑 Đăng nhập tài khoản MBS')
+  .addStringOption(option =>
+    option
+      .setName('username')
+      .setDescription('Tên đăng nhập MBS (VD: HH0357)')
+      .setRequired(true)
+  )
+  .addStringOption(option =>
+    option
+      .setName('password')
+      .setDescription('Mật khẩu MBS')
+      .setRequired(true)
+  );
+
 // Order command (buy/sell)
 export const orderCommand = new SlashCommandBuilder()
   .setName('mbs-order')
@@ -99,6 +116,7 @@ export const allCommands = [
   portfolioCommand,
   assetCommand,
   setOtpCommand,
+  loginCommand,
   orderCommand,
   cancelCommand,
   ordersCommand,
@@ -109,7 +127,9 @@ export const COMMAND_NAMES = {
   PORTFOLIO: 'mbs-portfolio',
   ASSET: 'mbs-asset',
   SET_OTP: 'mbs-set-otp',
+  LOGIN: 'mbs-login',
   ORDER: 'mbs-order',
   CANCEL: 'mbs-cancel',
   ORDERS: 'mbs-orders',
 } as const;
+

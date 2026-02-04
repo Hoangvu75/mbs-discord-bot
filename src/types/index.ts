@@ -1,5 +1,5 @@
 // API Actions
-export type ApiAction = 'portfolio' | 'asset' | 'order' | 'cancel' | 'set-otp' | 'orders';
+export type ApiAction = 'portfolio' | 'asset' | 'order' | 'cancel' | 'set-otp' | 'orders' | 'login';
 
 export type OrderSide = 'BUY' | 'SELL';
 
@@ -38,7 +38,14 @@ export interface OrdersParams {
   action: 'orders';
 }
 
-export type ApiParams = OrderParams | CancelParams | SetOtpParams | TradeInfoParams | OrdersParams;
+export interface LoginParams {
+  action: 'login';
+  username: string;
+  password: string;
+}
+
+export type ApiParams = OrderParams | CancelParams | SetOtpParams | TradeInfoParams | OrdersParams | LoginParams;
+
 
 // Response messages
 export const MESSAGES = {

@@ -8,6 +8,7 @@ import {
   handleCancel,
   handleSetOtp,
   handleOrders,
+  handleLogin,
 } from './handlers';
 
 // Validate environment variables
@@ -54,6 +55,9 @@ client.on('interactionCreate', async (interaction) => {
       case COMMAND_NAMES.SET_OTP:
         await handleSetOtp(interaction);
         break;
+      case COMMAND_NAMES.LOGIN:
+        await handleLogin(interaction);
+        break;
       case COMMAND_NAMES.ORDER:
         await handleOrder(interaction);
         break;
@@ -76,3 +80,4 @@ client.on('interactionCreate', async (interaction) => {
 
 // Start the bot
 client.login(config.botToken);
+
