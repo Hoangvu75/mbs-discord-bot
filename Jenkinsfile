@@ -44,8 +44,14 @@ pipeline {
                   checkout scm
                   container('trivy') {
                     sh """
-                      echo "=== Trivy FS Scan (code, secrets, config) ==="
-                      trivy fs --no-progress --exit-code 0 . 2>&1 | tee trivy-fs-summary.txt
+                      trivy fs --no-progress --exit-code 0 . 2>&1 | tee trivy-fs-full.log
+                      awk '
+                        / \\(npm\\)$| \\(node-pkg\\)$| \\(alpine\\)$/ {p=1}
+                        /^=+$/ {if(p) print; next}
+                        /^Total: [0-9]+ \\(UNKNOWN:/ {p=1}
+                        p {print}
+                        /^For OSS Maintainers|^To disable this notice|^Legend:/ {p=0}
+                      ' trivy-fs-full.log > trivy-fs-summary.txt
                     """
                   }
                   stash name: 'trivy-fs-summary', includes: 'trivy-fs-summary.txt', allowEmpty: true
@@ -121,8 +127,14 @@ pipeline {
                   unstash 'image-tar'
                   container('trivy') {
                     sh """
-                      echo "=== Trivy Image Scan ==="
-                      trivy image --no-progress --exit-code 0 --input \${WORKSPACE}/image.tar 2>&1 | tee trivy-image-summary.txt
+                      trivy image --no-progress --exit-code 0 --input \${WORKSPACE}/image.tar 2>&1 | tee trivy-image-full.log
+                      awk '
+                        / \\(npm\\)$| \\(node-pkg\\)$| \\(alpine\\)$/ {p=1}
+                        /^=+$/ {if(p) print; next}
+                        /^Total: [0-9]+ \\(UNKNOWN:/ {p=1}
+                        p {print}
+                        /^For OSS Maintainers|^To disable this notice|^Legend:/ {p=0}
+                      ' trivy-image-full.log > trivy-image-summary.txt
                     """
                   }
                   stash name: 'trivy-image-summary', includes: 'trivy-image-summary.txt', allowEmpty: true
