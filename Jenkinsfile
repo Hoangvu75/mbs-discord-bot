@@ -11,31 +11,39 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '5'))
   }
   stages {
-    stage('Build and Push (Kaniko)') {
+    stage('Build, Scan, Push') {
       steps {
         script {
           env.IMAGE_TAG = env.GIT_COMMIT?.take(7) ?: 'latest'
           def imageFull = "${env.HARBOR_HOST}/${env.HARBOR_PROJECT}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
-          podTemplate(yaml: """
-apiVersion: v1
-kind: Pod
-spec:
-  containers:
-  - name: kaniko
-    image: gcr.io/kaniko-project/executor:v1.23.0-debug
-    command: ["sleep", "99d"]
-    tty: true
-""") {
+          podTemplate(containers: [
+            containerTemplate(name: 'kaniko', image: 'gcr.io/kaniko-project/executor:v1.23.0-debug', command: 'sleep', args: '99d', ttyEnabled: true),
+            containerTemplate(name: 'trivy', image: 'aquasec/trivy:latest', command: 'sleep', args: '99d', ttyEnabled: true),
+            containerTemplate(name: 'crane', image: 'gcr.io/go-containerregistry/crane:latest', command: 'sleep', args: '99d', ttyEnabled: true)
+          ]) {
             node(POD_LABEL) {
               checkout scm
               withCredentials([usernamePassword(credentialsId: 'harbor-credentials', usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASS')]) {
-                sh """
-                  mkdir -p .docker
-                  AUTH=\$(echo -n "\${HARBOR_USER}:\${HARBOR_PASS}" | base64 | tr -d '\\\\n')
-                  echo '{"auths":{"https://${env.HARBOR_HOST}":{"auth":"'\$AUTH'"}}}' > .docker/config.json
-                """
+                // 1. Kaniko: build to tar (chưa push)
                 container('kaniko') {
-                  sh "export DOCKER_CONFIG=\${WORKSPACE}/.docker && /kaniko/executor -f \${WORKSPACE}/Dockerfile -c \${WORKSPACE} --destination=${imageFull}"
+                  sh """
+                    /kaniko/executor -f \${WORKSPACE}/Dockerfile -c \${WORKSPACE} \
+                      --tarPath=\${WORKSPACE}/image.tar --no-push
+                  """
+                }
+                // 2. Trivy: scan tar trong workspace (không cần pull)
+                container('trivy') {
+                  sh """
+                    trivy image --no-progress --severity CRITICAL,HIGH --exit-code 1 \
+                      --input \${WORKSPACE}/image.tar
+                  """
+                }
+                // 3. Crane: push tar lên Harbor (chỉ khi scan pass)
+                container('crane') {
+                  sh """
+                    crane auth login ${env.HARBOR_HOST} -u \${HARBOR_USER} -p \${HARBOR_PASS}
+                    crane push \${WORKSPACE}/image.tar ${imageFull}
+                  """
                 }
               }
             }
