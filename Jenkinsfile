@@ -11,39 +11,31 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '5'))
   }
   stages {
-    stage('Build, Scan, Push') {
+    stage('Build and Push (Kaniko)') {
       steps {
         script {
           env.IMAGE_TAG = env.GIT_COMMIT?.take(7) ?: 'latest'
           def imageFull = "${env.HARBOR_HOST}/${env.HARBOR_PROJECT}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
-          podTemplate(containers: [
-            containerTemplate(name: 'kaniko', image: 'gcr.io/kaniko-project/executor:v1.23.0-debug', command: 'sleep', args: '99d', ttyEnabled: true),
-            containerTemplate(name: 'trivy', image: 'aquasec/trivy:latest', command: 'sleep', args: '99d', ttyEnabled: true),
-            containerTemplate(name: 'skopeo', image: 'quay.io/skopeo/stable:latest', command: 'sleep', args: '99d', ttyEnabled: true)
-          ]) {
+          podTemplate(yaml: """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:v1.23.0-debug
+    command: ["sleep", "99d"]
+    tty: true
+""") {
             node(POD_LABEL) {
               checkout scm
               withCredentials([usernamePassword(credentialsId: 'harbor-credentials', usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASS')]) {
-                // 1. Kaniko: build to tar (chưa push)
+                sh """
+                  mkdir -p .docker
+                  AUTH=\$(echo -n "\${HARBOR_USER}:\${HARBOR_PASS}" | base64 | tr -d '\\\\n')
+                  echo '{"auths":{"https://${env.HARBOR_HOST}":{"auth":"'\$AUTH'"}}}' > .docker/config.json
+                """
                 container('kaniko') {
-                  sh """
-                    /kaniko/executor -f \${WORKSPACE}/Dockerfile -c \${WORKSPACE} \
-                      --tarPath=\${WORKSPACE}/image.tar --no-push
-                  """
-                }
-                // 2. Trivy: scan tar trong workspace (không cần pull)
-                container('trivy') {
-                  sh """
-                    trivy image --no-progress --exit-code 0 \
-                      --input \${WORKSPACE}/image.tar
-                  """
-                }
-                // 3. Skopeo: push tar lên Harbor (chỉ khi scan pass)
-                container('skopeo') {
-                  sh """
-                    skopeo copy --dest-creds="\${HARBOR_USER}:\${HARBOR_PASS}" \
-                      docker-archive:\${WORKSPACE}/image.tar docker://${imageFull}
-                  """
+                  sh "export DOCKER_CONFIG=\${WORKSPACE}/.docker && /kaniko/executor -f \${WORKSPACE}/Dockerfile -c \${WORKSPACE} --destination=${imageFull}"
                 }
               }
             }
@@ -96,6 +88,31 @@ pipeline {
               
               echo "Cleanup complete. Kept $KEEP_COUNT most recent images."
             '''
+          }
+        }
+      }
+    }
+
+    stage('Trivy Scan (Report)') {
+      steps {
+        script {
+          env.IMAGE_TAG = env.GIT_COMMIT?.take(7) ?: 'latest'
+          def imageFull = "${env.HARBOR_HOST}/${env.HARBOR_PROJECT}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
+          podTemplate(containers: [
+            containerTemplate(name: 'trivy', image: 'aquasec/trivy:latest', command: 'sleep', args: '99d', ttyEnabled: true)
+          ]) {
+            node(POD_LABEL) {
+              withCredentials([usernamePassword(credentialsId: 'harbor-credentials', usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASS')]) {
+                container('trivy') {
+                  sh """
+                    echo "=== Trivy Security Report (không chặn deploy) ==="
+                    trivy image --no-progress --exit-code 0 \
+                      --username "\${HARBOR_USER}" --password "\${HARBOR_PASS}" \
+                      ${imageFull}
+                  """
+                }
+              }
+            }
           }
         }
       }
