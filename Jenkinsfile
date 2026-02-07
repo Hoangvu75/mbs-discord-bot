@@ -45,8 +45,7 @@ pipeline {
                   container('trivy') {
                     sh """
                       echo "=== Trivy FS Scan (code, secrets, config) ==="
-                      trivy fs --no-progress --exit-code 0 . 2>&1 | tee trivy-fs-full.log
-                      tail -60 trivy-fs-full.log > trivy-fs-summary.txt
+                      trivy fs --no-progress --exit-code 0 . 2>&1 | tee trivy-fs-summary.txt
                     """
                   }
                   stash name: 'trivy-fs-summary', includes: 'trivy-fs-summary.txt', allowEmpty: true
@@ -123,8 +122,7 @@ pipeline {
                   container('trivy') {
                     sh """
                       echo "=== Trivy Image Scan ==="
-                      trivy image --no-progress --exit-code 0 --input \${WORKSPACE}/image.tar 2>&1 | tee trivy-image-full.log
-                      tail -60 trivy-image-full.log > trivy-image-summary.txt
+                      trivy image --no-progress --exit-code 0 --input \${WORKSPACE}/image.tar 2>&1 | tee trivy-image-summary.txt
                     """
                   }
                   stash name: 'trivy-image-summary', includes: 'trivy-image-summary.txt', allowEmpty: true
@@ -141,8 +139,8 @@ pipeline {
       script {
         def trivyFs = 'N/A'
         def trivyImage = 'N/A'
-        try { unstash 'trivy-fs-summary'; trivyFs = readFile('trivy-fs-summary.txt').take(8000) } catch (e) { /* ignore */ }
-        try { unstash 'trivy-image-summary'; trivyImage = readFile('trivy-image-summary.txt').take(8000) } catch (e) { /* ignore */ }
+        try { unstash 'trivy-fs-summary'; trivyFs = readFile('trivy-fs-summary.txt') } catch (e) { /* ignore */ }
+        try { unstash 'trivy-image-summary'; trivyImage = readFile('trivy-image-summary.txt') } catch (e) { /* ignore */ }
         def payload = groovy.json.JsonOutput.toJson([
           job_name: env.JOB_NAME,
           build_number: env.BUILD_NUMBER,
