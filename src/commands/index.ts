@@ -71,12 +71,11 @@ export const orderCommand = new SlashCommandBuilder()
       .setRequired(true)
       .setMinValue(10)
   )
-  .addNumberOption(option =>
+  .addStringOption(option =>
     option
       .setName('price')
-      .setDescription('Giá (nghìn đồng, VD: 32.5 = 32,500đ)')
+      .setDescription('Giá nghìn đồng (VD: 36.8 hoặc 36,8 = 36.800đ)')
       .setRequired(true)
-      .setMinValue(0.1)
   )
   .addStringOption(option =>
     option

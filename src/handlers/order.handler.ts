@@ -12,7 +12,12 @@ export async function handleOrder(interaction: ChatInputCommandInteraction): Pro
   const side = interaction.options.getString('side', true) as OrderSide;
   const symbol = interaction.options.getString('symbol', true).toUpperCase();
   const quantity = interaction.options.getInteger('quantity', true);
-  const price = interaction.options.getNumber('price', true);
+  const priceStr = interaction.options.getString('price', true);
+  const price = parseFloat(priceStr.replace(',', '.')); // 36.8 hoặc 36,8 → 36.8
+  if (isNaN(price) || price < 0.1) {
+    await interaction.editReply('❌ Giá không hợp lệ. VD: 36.8 hoặc 36,8');
+    return;
+  }
   const otpCode = interaction.options.getString('otp_code') || undefined;
 
   const sideLabel = side === 'BUY' ? 'MUA' : 'BÁN';
