@@ -3,7 +3,7 @@ import type { ApiParams } from '../types';
 
 /**
  * API Service - gọi n8n webhook MBS Trading 2
- * Khớp n8n + Postman: GET + urlencoded body ($json.query.action, $json.body.*)
+ * POST + urlencoded body ($json.query.action, $json.body.*)
  */
 class ApiService {
   private readonly baseUrl: string;
@@ -23,9 +23,9 @@ class ApiService {
       console.log(`📡 API Call: ${params.action}`);
 
       const response = await fetch(url, {
-        method: 'GET',
+        method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body || undefined,
+        body: body || '',
       });
 
       return response.ok;
