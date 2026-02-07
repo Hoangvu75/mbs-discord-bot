@@ -34,7 +34,7 @@ pipeline {
     }
     stage('Deploy & Scan') {
       parallel {
-        stage('Build & Push image') {
+        stage('Push image & update manifest') {
           steps {
             script {
               def imageFull = "${env.HARBOR_HOST}/${env.HARBOR_PROJECT}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
