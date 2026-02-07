@@ -46,8 +46,8 @@ pipeline {
                     sh """
                       trivy fs --no-progress --exit-code 0 . 2>&1 | tee trivy-fs-full.log
                       awk '
-                        / \\(npm\\)$| \\(node-pkg\\)$| \\(alpine\\)$/ {p=1}
-                        /^=+$/ {if(p) print; next}
+                        / \\(npm\\)\$| \\(node-pkg\\)\$| \\(alpine\\)\$/ {p=1}
+                        /^=+\$/ {if(p) print; next}
                         /^Total: [0-9]+ \\(UNKNOWN:/ {p=1}
                         p {print}
                         /^For OSS Maintainers|^To disable this notice|^Legend:/ {p=0}
@@ -129,8 +129,8 @@ pipeline {
                     sh """
                       trivy image --no-progress --exit-code 0 --input \${WORKSPACE}/image.tar 2>&1 | tee trivy-image-full.log
                       awk '
-                        / \\(npm\\)$| \\(node-pkg\\)$| \\(alpine\\)$/ {p=1}
-                        /^=+$/ {if(p) print; next}
+                        / \\(npm\\)\$| \\(node-pkg\\)\$| \\(alpine\\)\$/ {p=1}
+                        /^=+\$/ {if(p) print; next}
                         /^Total: [0-9]+ \\(UNKNOWN:/ {p=1}
                         p {print}
                         /^For OSS Maintainers|^To disable this notice|^Legend:/ {p=0}
