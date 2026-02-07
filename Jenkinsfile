@@ -141,8 +141,8 @@ pipeline {
       script {
         def trivyFs = 'N/A'
         def trivyImage = 'N/A'
-        try { unstash 'trivy-fs-summary'; trivyFs = readFile('trivy-fs-summary.txt').take(1500) } catch (e) { /* ignore */ }
-        try { unstash 'trivy-image-summary'; trivyImage = readFile('trivy-image-summary.txt').take(1500) } catch (e) { /* ignore */ }
+        try { unstash 'trivy-fs-summary'; trivyFs = readFile('trivy-fs-summary.txt').take(8000) } catch (e) { /* ignore */ }
+        try { unstash 'trivy-image-summary'; trivyImage = readFile('trivy-image-summary.txt').take(8000) } catch (e) { /* ignore */ }
         def payload = groovy.json.JsonOutput.toJson([
           job_name: env.JOB_NAME,
           build_number: env.BUILD_NUMBER,
