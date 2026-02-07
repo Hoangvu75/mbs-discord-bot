@@ -11,102 +11,97 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '5'))
   }
   stages {
-    stage('Build and Push') {
+    stage('Build') {
       steps {
         script {
           env.IMAGE_TAG = env.GIT_COMMIT?.take(7) ?: 'latest'
-          def imageFull = "${env.HARBOR_HOST}/${env.HARBOR_PROJECT}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
           podTemplate(containers: [
-            containerTemplate(name: 'kaniko', image: 'gcr.io/kaniko-project/executor:v1.23.0-debug', command: 'sleep', args: '99d', ttyEnabled: true),
-            containerTemplate(name: 'skopeo', image: 'quay.io/skopeo/stable:latest', command: 'sleep', args: '99d', ttyEnabled: true)
+            containerTemplate(name: 'kaniko', image: 'gcr.io/kaniko-project/executor:v1.23.0-debug', command: 'sleep', args: '99d', ttyEnabled: true)
           ]) {
             node(POD_LABEL) {
               checkout scm
-              withCredentials([usernamePassword(credentialsId: 'harbor-credentials', usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASS')]) {
-                container('kaniko') {
-                  sh """
-                    /kaniko/executor -f \${WORKSPACE}/Dockerfile -c \${WORKSPACE} \
-                      --tarPath=\${WORKSPACE}/image.tar --no-push
-                  """
-                }
-                container('skopeo') {
-                  sh """
-                    skopeo copy --dest-creds="\${HARBOR_USER}:\${HARBOR_PASS}" \
-                      docker-archive:\${WORKSPACE}/image.tar docker://${imageFull}
-                  """
-                }
+              container('kaniko') {
+                sh """
+                  /kaniko/executor -f \${WORKSPACE}/Dockerfile -c \${WORKSPACE} \
+                    --tarPath=\${WORKSPACE}/image.tar --no-push
+                """
               }
+              stash name: 'image-tar', includes: 'image.tar'
             }
           }
         }
       }
     }
-
-    stage('Update Manifest (GitOps)') {
-      steps {
-        script {
-          withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
-            sh """
-              rm -rf k8s_manifest || true
-              REPO_URL=\$(echo "${env.MANIFEST_REPO}" | sed "s|https://|https://\\${GIT_USER}:\\${GIT_TOKEN}@|")
-              git clone \$REPO_URL k8s_manifest
-              cd k8s_manifest
-              sed -i 's/tag: ".*"/tag: "${env.IMAGE_TAG}"/' ${env.VALUES_PATH}
-              git config user.email "jenkins@ci.local"
-              git config user.name "Jenkins CI"
-              git add ${env.VALUES_PATH}
-              git commit -m "chore: update ${env.IMAGE_NAME} image tag to ${env.IMAGE_TAG}" || echo "No changes to commit"
-              git push origin master
-            """
+    stage('Parallel: Push+Update vs Trivy') {
+      parallel {
+        stage('Push + Update Manifest + Cleanup') {
+          steps {
+            script {
+              def imageFull = "${env.HARBOR_HOST}/${env.HARBOR_PROJECT}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
+              podTemplate(containers: [
+                containerTemplate(name: 'skopeo', image: 'quay.io/skopeo/stable:latest', command: 'sleep', args: '99d', ttyEnabled: true)
+              ]) {
+                node(POD_LABEL) {
+                  unstash 'image-tar'
+                  withCredentials([usernamePassword(credentialsId: 'harbor-credentials', usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASS')]) {
+                    container('skopeo') {
+                      sh """
+                        skopeo copy --dest-creds="\${HARBOR_USER}:\${HARBOR_PASS}" \
+                          docker-archive:\${WORKSPACE}/image.tar docker://${imageFull}
+                      """
+                    }
+                  }
+                  withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                    sh """
+                      rm -rf k8s_manifest || true
+                      REPO_URL=\$(echo "${env.MANIFEST_REPO}" | sed "s|https://|https://\\${GIT_USER}:\\${GIT_TOKEN}@|")
+                      git clone \$REPO_URL k8s_manifest
+                      cd k8s_manifest
+                      sed -i 's/tag: ".*"/tag: "${env.IMAGE_TAG}"/' ${env.VALUES_PATH}
+                      git config user.email "jenkins@ci.local"
+                      git config user.name "Jenkins CI"
+                      git add ${env.VALUES_PATH}
+                      git commit -m "chore: update ${env.IMAGE_NAME} image tag to ${env.IMAGE_TAG}" || echo "No changes to commit"
+                      git push origin master
+                    """
+                  }
+                  withCredentials([usernamePassword(credentialsId: 'harbor-credentials', usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASS')]) {
+                    sh '''
+                      KEEP_COUNT=2
+                      API_URL="https://${HARBOR_HOST}/api/v2.0/projects/${HARBOR_PROJECT}/repositories/${IMAGE_NAME}/artifacts"
+                      RESPONSE=$(curl -s -u "${HARBOR_USER}:${HARBOR_PASS}" "${API_URL}?page_size=100&sort=-push_time")
+                      ARTIFACTS=$(echo "$RESPONSE" | grep -o '"digest":"sha256:[^"]*"' | sed 's/"digest":"//g' | sed 's/"//g')
+                      COUNT=0
+                      for DIGEST in $ARTIFACTS; do
+                        COUNT=$((COUNT + 1))
+                        if [ $COUNT -gt $KEEP_COUNT ]; then
+                          echo "Deleting old artifact: $DIGEST"
+                          curl -s -X DELETE -u "${HARBOR_USER}:${HARBOR_PASS}" "${API_URL}/${DIGEST}" || true
+                        fi
+                      done
+                      echo "Cleanup complete. Kept $KEEP_COUNT most recent images."
+                    '''
+                  }
+                }
+              }
+            }
           }
         }
-      }
-    }
-    stage('Cleanup Old Images (Harbor)') {
-      steps {
-        script {
-          withCredentials([usernamePassword(credentialsId: 'harbor-credentials', usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASS')]) {
-            sh '''
-              KEEP_COUNT=2
-              API_URL="https://${HARBOR_HOST}/api/v2.0/projects/${HARBOR_PROJECT}/repositories/${IMAGE_NAME}/artifacts"
-              
-              # Get all artifacts sorted by push_time desc (parse digest with grep/sed)
-              RESPONSE=$(curl -s -u "${HARBOR_USER}:${HARBOR_PASS}" "${API_URL}?page_size=100&sort=-push_time")
-              ARTIFACTS=$(echo "$RESPONSE" | grep -o '"digest":"sha256:[^"]*"' | sed 's/"digest":"//g' | sed 's/"//g')
-              
-              # Count and delete old ones
-              COUNT=0
-              for DIGEST in $ARTIFACTS; do
-                COUNT=$((COUNT + 1))
-                if [ $COUNT -gt $KEEP_COUNT ]; then
-                  echo "Deleting old artifact: $DIGEST"
-                  curl -s -X DELETE -u "${HARBOR_USER}:${HARBOR_PASS}" "${API_URL}/${DIGEST}" || true
-                fi
-              done
-              
-              echo "Cleanup complete. Kept $KEEP_COUNT most recent images."
-            '''
-          }
-        }
-      }
-    }
-    stage('Trivy Scan (Report Only)') {
-      steps {
-        script {
-          def imageFull = "${env.HARBOR_HOST}/${env.HARBOR_PROJECT}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
-          podTemplate(containers: [
-            containerTemplate(name: 'trivy', image: 'aquasec/trivy:latest', command: 'sleep', args: '99d', ttyEnabled: true)
-          ]) {
-            node(POD_LABEL) {
-              withCredentials([usernamePassword(credentialsId: 'harbor-credentials', usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASS')]) {
-                container('trivy') {
-                  sh """
-                    echo "=== Trivy Security Scan (informational, does not block build) ==="
-                    trivy image --no-progress --exit-code 0 \
-                      --username \${HARBOR_USER} --password \${HARBOR_PASS} \
-                      ${imageFull}
-                    echo "=== Trivy scan complete. See report above. ==="
-                  """
+        stage('Trivy Scan (Report Only)') {
+          steps {
+            script {
+              podTemplate(containers: [
+                containerTemplate(name: 'trivy', image: 'aquasec/trivy:latest', command: 'sleep', args: '99d', ttyEnabled: true)
+              ]) {
+                node(POD_LABEL) {
+                  unstash 'image-tar'
+                  container('trivy') {
+                    sh """
+                      echo "=== Trivy Security Scan (informational, does not block build) ==="
+                      trivy image --no-progress --exit-code 0 --input \${WORKSPACE}/image.tar
+                      echo "=== Trivy scan complete. See report above. ==="
+                    """
+                  }
                 }
               }
             }
