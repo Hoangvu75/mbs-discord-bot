@@ -37,7 +37,7 @@ class ApiService {
 
   /**
    * Build body urlencoded theo Postman (workflow expect $json.body.*)
-   * Price: giữ nguyên format nghìn (30.1 = 30,100đ) - user nhập 30.1, 40.5
+   * Price: user nhập nghìn (36, 40.1) → gửi VND đầy đủ (36000, 40100)
    */
   private buildUrlEncodedBody(params: ApiParams): string | null {
     const pairs: [string, string][] = [];
@@ -49,13 +49,15 @@ class ApiService {
         pairs.push(['otp', params.otp]);
         break;
       case 'order-buy':
-      case 'order-sell':
+      case 'order-sell': {
+        const priceVnd = Math.round(params.price * 1000);
         pairs.push(
           ['symbol', params.symbol],
           ['orderQty', String(params.orderQty)],
-          ['price', String(params.price)] // 30.1, 40.5 - nghìn đồng
+          ['price', String(priceVnd)] // 36 → 36000, 40.1 → 40100
         );
         break;
+      }
       case 'cancel-order':
         pairs.push(['transId', params.transId]);
         break;
