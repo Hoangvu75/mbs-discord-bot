@@ -32,9 +32,9 @@ pipeline {
         }
       }
     }
-    stage('Parallel: Push+Update vs Trivy') {
+    stage('Deploy & Scan') {
       parallel {
-        stage('Push + Update Manifest + Cleanup') {
+        stage('Build & Push image') {
           steps {
             script {
               def imageFull = "${env.HARBOR_HOST}/${env.HARBOR_PROJECT}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
@@ -87,7 +87,7 @@ pipeline {
             }
           }
         }
-        stage('Trivy Scan (Report Only)') {
+        stage('Trivy Scan') {
           steps {
             script {
               podTemplate(containers: [
