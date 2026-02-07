@@ -19,7 +19,7 @@ pipeline {
           podTemplate(containers: [
             containerTemplate(name: 'kaniko', image: 'gcr.io/kaniko-project/executor:v1.23.0-debug', command: 'sleep', args: '99d', ttyEnabled: true),
             containerTemplate(name: 'trivy', image: 'aquasec/trivy:latest', command: 'sleep', args: '99d', ttyEnabled: true),
-            containerTemplate(name: 'crane', image: 'gcr.io/go-containerregistry/crane:latest', command: 'sleep', args: '99d', ttyEnabled: true)
+            containerTemplate(name: 'skopeo', image: 'quay.io/skopeo/stable:latest', command: 'sleep', args: '99d', ttyEnabled: true)
           ]) {
             node(POD_LABEL) {
               checkout scm
@@ -38,11 +38,11 @@ pipeline {
                       --input \${WORKSPACE}/image.tar
                   """
                 }
-                // 3. Crane: push tar lên Harbor (chỉ khi scan pass)
-                container('crane') {
+                // 3. Skopeo: push tar lên Harbor (chỉ khi scan pass)
+                container('skopeo') {
                   sh """
-                    crane auth login ${env.HARBOR_HOST} -u \${HARBOR_USER} -p \${HARBOR_PASS}
-                    crane push \${WORKSPACE}/image.tar ${imageFull}
+                    skopeo copy --dest-creds="\${HARBOR_USER}:\${HARBOR_PASS}" \
+                      docker-archive:\${WORKSPACE}/image.tar docker://${imageFull}
                   """
                 }
               }
