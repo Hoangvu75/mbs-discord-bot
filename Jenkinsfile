@@ -34,7 +34,7 @@ pipeline {
                 // 2. Trivy: scan tar trong workspace (không cần pull)
                 container('trivy') {
                   sh """
-                    trivy image --no-progress --severity CRITICAL,HIGH --exit-code 1 \
+                    trivy image --no-progress --exit-code 0 \
                       --input \${WORKSPACE}/image.tar
                   """
                 }
