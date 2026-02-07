@@ -10,10 +10,10 @@ export async function handleOrders(interaction: ChatInputCommandInteraction): Pr
 
   console.log('📋 Getting orders list');
 
-  const success = await apiService.call({ action: 'orders' });
+  const success = await apiService.call({ action: 'orders-status' });
 
   if (success) {
-    await interaction.editReply('✅ Sổ lệnh đã được gửi!');
+    await interaction.editReply(MESSAGES.PROCESSING_ORDERS);
   } else {
     await interaction.editReply(MESSAGES.ERROR_GENERIC);
   }

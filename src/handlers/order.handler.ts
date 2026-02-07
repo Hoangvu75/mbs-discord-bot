@@ -3,7 +3,8 @@ import { apiService } from '../services/api.service';
 import { MESSAGES, type OrderSide } from '../types';
 
 /**
- * Handler for order command (buy/sell)
+ * Handler for order command (buy/sell) - gọi n8n webhook order-buy/order-sell
+ * Nếu có otp_code: gọi set-otp trước rồi mới order (workflow lấy OTP từ Redis)
  */
 export async function handleOrder(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply();
@@ -15,15 +16,23 @@ export async function handleOrder(interaction: ChatInputCommandInteraction): Pro
   const otpCode = interaction.options.getString('otp_code') || undefined;
 
   const sideLabel = side === 'BUY' ? 'MUA' : 'BÁN';
+  const action = side === 'BUY' ? 'order-buy' : 'order-sell';
   console.log(`📊 Order: ${sideLabel} ${symbol} x${quantity} @ ${price}k`);
 
+  // Nếu có OTP: set trước (workflow Get cached OTP lấy từ Redis)
+  if (otpCode) {
+    const otpOk = await apiService.call({ action: 'set-otp', otp: otpCode });
+    if (!otpOk) {
+      await interaction.editReply(MESSAGES.ERROR_CONNECTION);
+      return;
+    }
+  }
+
   const success = await apiService.call({
-    action: 'order',
-    side,
+    action,
     symbol,
-    quantity,
+    orderQty: quantity,
     price,
-    otpCode,
   });
 
   if (success) {

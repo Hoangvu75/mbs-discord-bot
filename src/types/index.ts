@@ -1,5 +1,13 @@
-// API Actions
-export type ApiAction = 'portfolio' | 'asset' | 'order' | 'cancel' | 'set-otp' | 'orders' | 'login';
+// API Actions - khớp với n8n workflow MBS Trading 2
+export type ApiAction =
+  | 'portfolio'
+  | 'asset'
+  | 'orders-status'
+  | 'order-buy'
+  | 'order-sell'
+  | 'cancel-order'
+  | 'set-otp'
+  | 'login';
 
 export type OrderSide = 'BUY' | 'SELL';
 
@@ -9,25 +17,22 @@ export interface CommandDefinition {
   description: string;
 }
 
-// API Request params
+// API Request - workflow expect query.action + JSON body
 export interface OrderParams {
-  action: 'order';
-  side: OrderSide;
+  action: 'order-buy' | 'order-sell';
   symbol: string;
-  quantity: number;
-  price: number;
-  otpCode?: string;
+  orderQty: number;
+  price: number; // giá nghìn đồng (32.5 = 32,500đ)
 }
 
 export interface CancelParams {
-  action: 'cancel';
+  action: 'cancel-order';
   transId: string;
-  otpCode?: string;
 }
 
 export interface SetOtpParams {
   action: 'set-otp';
-  otpCode: string;
+  otp: string;
 }
 
 export interface TradeInfoParams {
@@ -35,7 +40,7 @@ export interface TradeInfoParams {
 }
 
 export interface OrdersParams {
-  action: 'orders';
+  action: 'orders-status';
 }
 
 export interface LoginParams {
@@ -44,13 +49,19 @@ export interface LoginParams {
   password: string;
 }
 
-export type ApiParams = OrderParams | CancelParams | SetOtpParams | TradeInfoParams | OrdersParams | LoginParams;
-
+export type ApiParams =
+  | OrderParams
+  | CancelParams
+  | SetOtpParams
+  | TradeInfoParams
+  | OrdersParams
+  | LoginParams;
 
 // Response messages
 export const MESSAGES = {
   PROCESSING_PORTFOLIO: '✅ Báo cáo danh mục đã được gửi!',
   PROCESSING_ASSET: '✅ Thông tin tài sản đã được gửi!',
+  PROCESSING_ORDERS: '✅ Sổ lệnh đã được gửi!',
   PROCESSING_ORDER: (side: string, qty: number, symbol: string, price: number) =>
     `⏳ Đang xử lý lệnh ${side} ${qty} ${symbol} @ ${price}k...`,
   PROCESSING_CANCEL: (transId: string) =>

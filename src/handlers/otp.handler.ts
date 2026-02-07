@@ -14,7 +14,7 @@ export async function handleSetOtp(interaction: ChatInputCommandInteraction): Pr
 
   const success = await apiService.call({
     action: 'set-otp',
-    otpCode,
+    otp: otpCode,
   });
 
   if (success) {
