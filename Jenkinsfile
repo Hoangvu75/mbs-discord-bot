@@ -143,6 +143,29 @@ pipeline {
             }
           }
         }
+        stage('Trivy Config (k8s_manifest)') {
+          steps {
+            script {
+              podTemplate(containers: [
+                containerTemplate(name: 'trivy', image: 'aquasec/trivy:latest', command: 'sleep', args: '99d', ttyEnabled: true)
+              ]) {
+                node(POD_LABEL) {
+                  withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                    container('trivy') {
+                      sh """
+                        rm -rf k8s_manifest || true
+                        REPO_URL=\$(echo "${env.MANIFEST_REPO}" | sed "s|https://|https://\\${GIT_USER}:\\${GIT_TOKEN}@|")
+                        git clone \$REPO_URL k8s_manifest
+                        trivy config --no-progress --exit-code 0 k8s_manifest/apps/playground/mbs-discord-bot/ 2>&1 | tee trivy-config-summary.txt
+                      """
+                    }
+                  }
+                  stash name: 'trivy-config-summary', includes: 'trivy-config-summary.txt', allowEmpty: true
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -151,15 +174,18 @@ pipeline {
       script {
         def trivyFs = 'N/A'
         def trivyImage = 'N/A'
+        def trivyConfig = 'N/A'
         try { unstash 'trivy-fs-summary'; trivyFs = readFile('trivy-fs-summary.txt') } catch (e) { /* ignore */ }
         try { unstash 'trivy-image-summary'; trivyImage = readFile('trivy-image-summary.txt') } catch (e) { /* ignore */ }
+        try { unstash 'trivy-config-summary'; trivyConfig = readFile('trivy-config-summary.txt') } catch (e) { /* ignore */ }
         def payload = groovy.json.JsonOutput.toJson([
           job_name: env.JOB_NAME,
           build_number: env.BUILD_NUMBER,
           build_url: env.BUILD_URL,
           status: currentBuild.currentResult,
           trivy_fs_summary: trivyFs,
-          trivy_image_summary: trivyImage
+          trivy_image_summary: trivyImage,
+          trivy_config_summary: trivyConfig
         ])
         writeFile file: 'webhook-payload.json', text: payload
         sh 'curl -X POST "https://n8n.hoangvu75.space/webhook/jenkins-notify" -H "Content-Type: application/json" -d @webhook-payload.json'
