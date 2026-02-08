@@ -156,7 +156,7 @@ pipeline {
                         rm -rf k8s_manifest || true
                         REPO_URL=\$(echo "${env.MANIFEST_REPO}" | sed "s|https://|https://\\${GIT_USER}:\\${GIT_TOKEN}@|")
                         git clone \$REPO_URL k8s_manifest
-                        trivy config --no-progress --exit-code 0 k8s_manifest/apps/playground/mbs-discord-bot/ 2>&1 | tee trivy-config-summary.txt
+                        trivy config -q --exit-code 0 k8s_manifest/apps/playground/mbs-discord-bot/ 2>&1 | tee trivy-config-summary.txt
                       """
                     }
                   }
